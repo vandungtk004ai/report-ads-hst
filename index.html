@@ -542,7 +542,7 @@ async function loadApp(){
 
 async function loadWeeks(){
   const snap=await S.db.doc('config/meta').get();
-  S.weeks=(snap.exists&&snap.data().weeks)||[];
+  S.weeks=(snap.exists&&snap.data().weeks)?[...snap.data().weeks]:[];
   // Fallback: scan reports if weeks list is empty but reports exist
   if(!S.weeks.length){
     const rsnap=await S.db.collection('reports').limit(50).get();
@@ -965,20 +965,28 @@ function videoScore(v,avgCpr){
   else if(freq>2.5){score-=10;recs.push({sev:'w',tag:'Fatigue',msg:`Tần suất ${freq.toFixed(1)}x — Audience bắt đầu nhàm`,act:'Chuẩn bị 1-2 video thay thế. Cân nhắc mở rộng audience.'});}
   else if(freq>0)recs.push({sev:'g',tag:'Fatigue',msg:`Tần suất ${freq.toFixed(1)}x — Chưa bão hoà`,act:'Tiếp tục chạy.'});
 
-  // CPR so với trung bình
-  if(avgCpr>0&&cpr>0){
+  // CPR so với mục tiêu 42% giá SP
+  const avgOrder=getAvgOrder(v.product);
+  const targetCpr=avgOrder*0.42;
+  if(targetCpr>0&&cpr>0){
+    const ratio=cpr/targetCpr;
+    if(ratio>1.5){score-=25;recs.push({sev:'c',tag:'CPA',msg:`CPR ${fVND(cpr)} — Vượt mục tiêu ${ratio.toFixed(1)}x (CPA mục tiêu: ${fVND(targetCpr)})`,act:'Tối ưu landing page, CTA và nội dung chốt đơn. Xem lại target audience.'});}
+    else if(ratio>1.0){score-=12;recs.push({sev:'w',tag:'CPA',msg:`CPR ${fVND(cpr)} — Chưa đạt CPA mục tiêu ${fVND(targetCpr)}`,act:'Thêm offer hấp dẫn hơn, cải thiện phần chốt đơn trong video.'});}
+    else recs.push({sev:'g',tag:'CPA',msg:`CPR ${fVND(cpr)} ≤ ${fVND(targetCpr)} — Đạt CPA mục tiêu (42% giá SP)`,act:'Duy trì và có thể tăng ngân sách.'});
+  }else if(avgCpr>0&&cpr>0){
+    // Fallback khi chưa cài giá SP: so với trung bình tuần
     const ratio=cpr/avgCpr;
-    if(ratio>3){score-=20;recs.push({sev:'c',tag:'CPR',msg:`CPR cao hơn trung bình ${ratio.toFixed(1)}x`,act:'Kiểm tra lại target audience, landing page và nội dung CTA cuối video.'});}
-    else if(ratio>1.8){score-=10;recs.push({sev:'w',tag:'CPR',msg:`CPR cao hơn trung bình ${ratio.toFixed(1)}x`,act:'Tối ưu CTA, thử thêm offer hấp dẫn hơn (giảm giá, quà tặng).'});}
-    else if(ratio<0.7)recs.push({sev:'g',tag:'CPR',msg:`CPR thấp hơn trung bình ${(1/ratio).toFixed(1)}x`,act:'Video hiệu quả — tăng ngân sách để scale.'});
+    if(ratio>3){score-=20;recs.push({sev:'c',tag:'CPA',msg:`CPR cao hơn trung bình ${ratio.toFixed(1)}x (chưa cài giá SP)`,act:'Kiểm tra target audience, landing page và CTA cuối video.'});}
+    else if(ratio>1.8){score-=10;recs.push({sev:'w',tag:'CPA',msg:`CPR cao hơn trung bình ${ratio.toFixed(1)}x`,act:'Tối ưu CTA, thử thêm offer hấp dẫn hơn.'});}
+    else if(ratio<0.7)recs.push({sev:'g',tag:'CPA',msg:`CPR thấp hơn trung bình ${(1/ratio).toFixed(1)}x`,act:'Video hiệu quả — tăng ngân sách để scale.'});
   }
 
-  // ROAS
+  // ROAS — mục tiêu 2.38x (= 1/42% break-even)
   if(hasPrice){
-    if(v.roas>0&&v.roas<1){score-=30;recs.push({sev:'c',tag:'ROAS',msg:`ROAS ${v.roas.toFixed(2)} — Đang lỗ vốn`,act:'Dừng ngay hoặc cắt giảm ngân sách. Xem lại giá bán, offer và nội dung chốt đơn.'});}
-    else if(v.roas>=1&&v.roas<2){score-=10;recs.push({sev:'w',tag:'ROAS',msg:`ROAS ${v.roas.toFixed(2)} — Hiệu quả thấp`,act:'Tối ưu nội dung chốt đơn, thêm social proof (đánh giá, before/after), cải thiện offer.'});}
-    else if(v.roas>=2&&v.roas<3)recs.push({sev:'w',tag:'ROAS',msg:`ROAS ${v.roas.toFixed(2)} — Tốt, còn tối ưu được`,act:'Thử nâng giá hoặc upsell để tăng ROAS.'});
-    else if(v.roas>=3)recs.push({sev:'g',tag:'ROAS',msg:`ROAS ${v.roas.toFixed(2)} — Xuất sắc`,act:'Scale ngân sách mạnh. Tạo thêm video tương tự.'});
+    if(v.roas>0&&v.roas<1){score-=30;recs.push({sev:'c',tag:'ROAS',msg:`ROAS ${v.roas.toFixed(2)}x — Đang lỗ vốn`,act:'Dừng ngay hoặc cắt giảm ngân sách. Xem lại giá bán, offer và nội dung chốt đơn.'});}
+    else if(v.roas>=1&&v.roas<2.38){score-=10;recs.push({sev:'w',tag:'ROAS',msg:`ROAS ${v.roas.toFixed(2)}x — Chưa đạt mục tiêu 2.38x`,act:'Tối ưu nội dung chốt đơn, thêm social proof (đánh giá, before/after), cải thiện offer.'});}
+    else if(v.roas>=2.38&&v.roas<4)recs.push({sev:'g',tag:'ROAS',msg:`ROAS ${v.roas.toFixed(2)}x — Đạt mục tiêu`,act:'Tốt, duy trì. Thử nâng giá hoặc upsell để cải thiện thêm.'});
+    else if(v.roas>=4)recs.push({sev:'g',tag:'ROAS',msg:`ROAS ${v.roas.toFixed(2)}x — Xuất sắc`,act:'Scale ngân sách mạnh. Tạo thêm video tương tự.'});
   }
 
   // CPM — Chi phí hiển thị
@@ -1279,7 +1287,7 @@ async function doUpload(){
     await S.db.doc(`reports/${id}`).set({week,mkt,rows,uploaded_by:S.user.name,uploaded_at:Date.now()});
     // update week list
     if(!S.weeks.includes(week)){
-      S.weeks.push(week);S.weeks.sort((a,b)=>b.localeCompare(a));
+      S.weeks=[...S.weeks,week];S.weeks.sort((a,b)=>b.localeCompare(a));
       await S.db.doc('config/meta').set({weeks:S.weeks});
       rebuildWeekSelect();
     }
