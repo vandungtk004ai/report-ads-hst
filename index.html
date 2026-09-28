@@ -359,7 +359,7 @@ const S = {
   weeks: [],
   week: '',
   products: [...PRODUCTS_DEF.map(p=>({...p,avg_order:0}))],
-  driveLinks: {},
+  driveLinks: {}, driveFolder: '',
   weekRows: [],     // flattened rows for current week
   sortCol: '', sortDir: 1,
   filterProd: '',
@@ -583,7 +583,9 @@ async function loadProducts(){
 }
 async function loadDriveLinks(){
   const snap=await S.db.doc('config/drive_links').get();
-  S.driveLinks=snap.exists?(snap.data().links||{}):{};
+  const d=snap.exists?snap.data():{};
+  S.driveLinks=d.links||{};
+  S.driveFolder=d.folder||'';
 }
 
 function rebuildWeekSelect(){
@@ -798,7 +800,7 @@ function renderOverview(el){
       <div class="tbl-wrap">
         <table><thead><tr><th>Video</th><th>SP</th><th class="r">KQ</th><th class="r">CPR</th></tr></thead>
         <tbody>${topVideos.map(v=>`<tr>
-          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${v.video}">${v.driveUrl?`<a class="link" href="${v.driveUrl}" target="_blank">▶ ${v.video}</a>`:v.video}</td>
+          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;" title="${v.video}">${v.driveUrl?`<a class="link" href="${v.driveUrl}" target="_blank">▶ ${v.video}</a>`:S.driveFolder?`${v.video} <a class="link" href="${S.driveFolder}" target="_blank" title="Tìm trong thư mục Drive">📁</a>`:v.video}</td>
           <td><span class="badge" style="background:${v.prodColor}22;color:${v.prodColor}">${v.prodLabel}</span></td>
           <td class="r bold">${fNum(v.results)}</td>
           <td class="r">${fVND(v.cpr)}</td>
@@ -885,7 +887,7 @@ function renderProdBlock(p){
           </tr></thead>
           <tbody>${videos.map(v=>`<tr>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${v.video}">
-              ${v.driveUrl?`<a class="link" href="${v.driveUrl}" target="_blank">▶ ${v.video}</a>`:v.video}
+              ${v.driveUrl?`<a class="link" href="${v.driveUrl}" target="_blank">▶ ${v.video}</a>`:S.driveFolder?`${v.video} <a class="link" href="${S.driveFolder}" target="_blank" title="Tìm video trong Drive">📁</a>`:v.video}
             </td>
             <td>${v.mkt}</td>
             <td class="r">${fNum(v.impressions)}</td>
@@ -1054,7 +1056,7 @@ function renderVideoCard(v,sc){
   <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
     <div style="flex:1;min-width:200px;">
       <div style="font-weight:600;font-size:14px;word-break:break-all;">
-        ${v.driveUrl?`<a class="link" href="${v.driveUrl}" target="_blank" style="color:var(--primary);">▶ ${v.video}</a>`:v.video}
+        ${v.driveUrl?`<a class="link" href="${v.driveUrl}" target="_blank" style="color:var(--primary);">▶ ${v.video}</a>`:S.driveFolder?`${v.video} <a class="link" href="${S.driveFolder}" target="_blank" title="Tìm video trong Drive" style="color:var(--primary);">📁</a>`:v.video}
       </div>
       <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">
         <span class="badge" style="background:${v.prodColor}22;color:${v.prodColor}">${v.prodLabel}</span>
@@ -1446,38 +1448,64 @@ function deleteProduct(code){
 function renderCfgDrive(el){
   const links=Object.entries(S.driveLinks);
   el.innerHTML=`
-  <div style="max-width:720px;">
+  <div style="max-width:720px;display:flex;flex-direction:column;gap:16px;">
+    <div class="card">
+      <div class="card-hd"><div><div class="card-ttl">📁 Thư mục Drive gốc</div><div class="small muted mt-4">Link folder chứa toàn bộ video. Nút "Tìm video" trong báo cáo sẽ mở folder này.</div></div></div>
+      <div id="drive-folder-alert"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+        <input class="inp" id="inp-drive-folder" value="${S.driveFolder}" placeholder="https://drive.google.com/drive/folders/..." style="flex:1;">
+        <button class="btn btn-p btn-sm" onclick="saveDriveFolder()">Lưu</button>
+        ${S.driveFolder?`<a class="btn btn-s btn-sm" href="${S.driveFolder}" target="_blank">Mở ↗</a>`:''}
+      </div>
+    </div>
     <div class="card">
       <div class="card-hd">
         <div>
-          <div class="card-ttl">Quản lý Drive Links</div>
-          <div class="small muted mt-4">Tên video phải khớp chính xác với phần sau dấu _ trong tên quảng cáo.</div>
+          <div class="card-ttl">Link video cụ thể</div>
+          <div class="small muted mt-4">Mã video phải khớp với tên sau dấu _ trong tên chiến dịch (VD: <b>V1</b>, <b>V2</b>...).</div>
         </div>
         <button class="btn btn-p btn-sm" onclick="openDriveModal()">+ Thêm link</button>
       </div>
       <div id="drive-alert"></div>
       ${links.length?`
       <div class="tbl-wrap">
-        <table><thead><tr><th>Tên video</th><th>Drive URL</th><th></th></tr></thead>
+        <table><thead><tr><th>Mã video</th><th>Drive URL</th><th></th></tr></thead>
         <tbody>${links.map(([name,url])=>`<tr>
           <td class="bold">${name}</td>
-          <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;"><a class="link" href="${url}" target="_blank">${url}</a></td>
+          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;"><a class="link" href="${url}" target="_blank">${url}</a></td>
           <td><button class="btn btn-d btn-sm" onclick="deleteDriveLink('${name.replace(/'/g,"\\'")}')">Xóa</button></td>
         </tr>`).join('')}</tbody></table>
-      </div>`:`<div class="empty"><div class="empty-ttl">Chưa có drive link nào</div><p class="small muted">Thêm link video Drive để hiển thị trong báo cáo.</p></div>`}
+      </div>`:`<div class="empty"><div class="empty-ttl">Chưa có link cụ thể</div><p class="small muted">Nhập link Drive cho từng mã video để chèn trực tiếp trong báo cáo.</p></div>`}
     </div>
   </div>
   <div id="drive-modal"></div>`;
 }
+async function saveDriveFolder(){
+  const url=(document.getElementById('inp-drive-folder').value||'').trim();
+  try{
+    const snap=await S.db.doc('config/drive_links').get();
+    const d=snap.exists?snap.data():{};
+    await S.db.doc('config/drive_links').set({...d,folder:url});
+    S.driveFolder=url;
+    setAlert('drive-folder-alert','✓ Đã lưu thư mục Drive.','s');
+    setTimeout(()=>renderCfgDrive(document.getElementById('content')),800);
+  }catch(e){setAlert('drive-folder-alert','Lỗi: '+e.message);}
+}
 
 function openDriveModal(name='',url=''){
+  // Collect known video codes not yet linked
+  const allVids=[...new Set(S.weekRows.map(r=>r.video).filter(v=>v&&!S.driveLinks[v]))].slice(0,12);
+  const suggestions=allVids.length?`<div class="small muted mb-4">Mã video chưa có link: ${allVids.map(v=>`<span class="badge" style="cursor:pointer;background:var(--brand-10);color:var(--primary);" onclick="document.getElementById('dm-name').value='${v}'">${v}</span>`).join(' ')}</div>`:'';
+  const folderHint=S.driveFolder?`<div class="small muted mb-8">📁 <a class="link" href="${S.driveFolder}" target="_blank">Mở thư mục Drive</a> để tìm video, copy link file và dán vào ô dưới.</div>`:'';
   document.getElementById('drive-modal').innerHTML=`
   <div class="modal-bg" onclick="closeDriveModal()">
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-ttl">Thêm Drive Link</div>
       <div id="drive-m-alert"></div>
-      <div class="fg"><label class="lbl">Tên video (khớp với tên trong CSV)</label><input class="inp" id="dm-name" value="${name}" placeholder="VD: giam_can_tuyet_voi_01"></div>
-      <div class="fg"><label class="lbl">Google Drive URL</label><input class="inp" id="dm-url" value="${url}" placeholder="https://drive.google.com/..."></div>
+      ${suggestions}
+      ${folderHint}
+      <div class="fg"><label class="lbl">Mã video (VD: V1, V2, MATCHA_V1)</label><input class="inp" id="dm-name" value="${name}" placeholder="V1"></div>
+      <div class="fg"><label class="lbl">Google Drive URL (link file video)</label><input class="inp" id="dm-url" value="${url}" placeholder="https://drive.google.com/file/d/.../view"></div>
       <div class="modal-foot">
         <button class="btn btn-s" onclick="closeDriveModal()">Hủy</button>
         <button class="btn btn-p" onclick="saveDriveLink()">Lưu</button>
