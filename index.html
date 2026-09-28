@@ -1275,7 +1275,7 @@ async function doUpload(){
       amount_spent:parseNum(row[cols.amount_spent]),
       cpm:parseNum(row[cols.cpm]),
       cpc:parseNum(row[cols.cpc]),
-      ctr:parsePct(row[cols.ctr]),
+      ctr:parseNum(row[cols.ctr])/100,
       link_clicks:parseNum(row[cols.link_clicks]),
       results:parseNum(row[cols.results]),
       cost_per_result:parseNum(row[cols.cost_per_result]),
