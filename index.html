@@ -1235,9 +1235,11 @@ function detectColumns(fields){
 function showCSVPreview(){
   if(!csvRows||!csvRows.length)return;
   const cols=csvCols;
+  const _nc=cols.ad_name||cols.campaign;
   const preview=csvRows.slice(0,5).map(row=>{
-    const {product,video}=parseAdName(row[cols.ad_name]||'');
-    return{ad:row[cols.ad_name]||'',product,video,
+    const _n=row[_nc]||'';
+    const {product,video}=parseAdName(_n);
+    return{ad:_n,product,video,
       impressions:parseNum(row[cols.impressions]),
       results:parseNum(row[cols.results]),
       amount_spent:parseNum(row[cols.amount_spent])};
