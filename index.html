@@ -549,7 +549,7 @@ async function loadWeeks(){
     if(!rsnap.empty){
       const weekSet=new Set(rsnap.docs.map(d=>d.data().week).filter(Boolean));
       S.weeks=[...weekSet];
-      if(S.weeks.length)await S.db.doc('config/meta').set({weeks:S.weeks});
+      if(S.weeks.length){const ms2=await S.db.doc('config/meta').get();const md2=ms2.exists?ms2.data():{};await S.db.doc('config/meta').set({...md2,weeks:S.weeks,initialized:true});}
     }
   }
   S.weeks.sort((a,b)=>b.localeCompare(a));
@@ -1282,30 +1282,35 @@ async function doUpload(){
       result_type:row[cols.result_type]||'',
     };
   });
+  setAlert('upload-alert','⏳ Đang lưu dữ liệu...','s');
   try{
     const id=`${safeId(week)}_${safeId(mkt)}_${Date.now()}`;
     await S.db.doc(`reports/${id}`).set({week,mkt,rows,uploaded_by:S.user.name,uploaded_at:Date.now()});
-    // update week list
-    if(!S.weeks.includes(week)){
-      S.weeks=[...S.weeks,week];S.weeks.sort((a,b)=>b.localeCompare(a));
-      await S.db.doc('config/meta').set({weeks:S.weeks});
-      rebuildWeekSelect();
-    }
-    setAlert('upload-alert',`✓ Upload thành công ${rows.length} dòng cho tuần ${week}, MKT: ${mkt}`,'s');
-    // Auto-select uploaded week and load report
-    S.week=week;
-    rebuildWeekSelect();
-    await loadWeekData();
-    cancelUpload();
-    loadUploadHistory();
-    setTimeout(()=>goNav('overview'),300);
   }catch(e){
     const msg=e.message||String(e);
-    const isPermErr=msg.toLowerCase().includes('malformed')||msg.toLowerCase().includes('limit')||msg.toLowerCase().includes('permission')||msg.toLowerCase().includes('denied');
+    const isPermErr=/permission|denied|unauthorized|not_granted/i.test(msg);
     setAlert('upload-alert', isPermErr
-      ? '❌ Không có quyền ghi dữ liệu. Hãy <a href="https://claude.ai" target="_blank" style="color:inherit;text-decoration:underline;">đăng nhập claude.ai</a> trước rồi thử lại.'
-      : 'Lỗi: '+msg);
+      ? '❌ Không có quyền ghi dữ liệu. Vui lòng <a href="https://claude.ai" target="_blank" style="color:inherit;text-decoration:underline;">đăng nhập claude.ai</a> rồi thử lại.'
+      : '❌ Lỗi lưu báo cáo: '+msg);
+    return;
   }
+  // Cập nhật danh sách tuần (không-critical, không dừng nếu lỗi)
+  try{
+    if(!S.weeks.includes(week)){
+      S.weeks=[...S.weeks,week];S.weeks.sort((a,b)=>b.localeCompare(a));
+      const ms=await S.db.doc('config/meta').get();
+      const md=ms.exists?ms.data():{};
+      await S.db.doc('config/meta').set({...md,weeks:S.weeks,initialized:true});
+      rebuildWeekSelect();
+    }
+  }catch(e){console.warn('config/meta update failed:',e);}
+  setAlert('upload-alert',`✓ Upload thành công ${rows.length} dòng cho tuần ${week}, MKT: ${mkt}`,'s');
+  S.week=week;
+  rebuildWeekSelect();
+  await loadWeekData();
+  cancelUpload();
+  loadUploadHistory();
+  setTimeout(()=>goNav('overview'),300);
 }
 
 function confirmDelete(id,week){
