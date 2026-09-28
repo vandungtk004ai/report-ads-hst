@@ -1194,8 +1194,9 @@ function processCSVFile(file){
     header:true,skipEmptyLines:true,
     complete(res){
       csvCols=detectColumns(res.meta.fields||[]);
-      // Skip summary rows (rows with no ad name — Facebook exports a total row at top)
-      csvRows=res.data.filter(row=>(row[csvCols.ad_name]||'').trim()!=='');
+      // Fallback: use campaign column as row name if ad_name not present
+      const _nameCol=csvCols.ad_name||csvCols.campaign;
+      csvRows=res.data.filter(row=>(row[_nameCol]||'').trim()!=='');
       const dateStart=csvRows[0]?csvRows[0][csvCols.date_start]:'';
       const weekGuess=isoWeek(dateStart)||'';
       if(weekGuess){
@@ -1217,13 +1218,14 @@ function processCSVFile(file){
 
 function detectColumns(fields){
   const map={};
+  const nc=s=>s.normalize('NFC').toLowerCase().trim();
   for(const[key,aliases]of Object.entries(COL_ALIASES)){
     for(const f of fields){
-      if(aliases.some(a=>f.toLowerCase().trim()===a.toLowerCase())){map[key]=f;break;}
+      if(aliases.some(a=>nc(f)===nc(a))){map[key]=f;break;}
     }
     if(!map[key]){
       for(const f of fields){
-        if(aliases.some(a=>f.toLowerCase().includes(a.toLowerCase().slice(0,8)))){map[key]=f;break;}
+        if(aliases.some(a=>nc(f).includes(nc(a).slice(0,10)))){map[key]=f;break;}
       }
     }
   }
@@ -1265,9 +1267,10 @@ async function doUpload(){
   setAlert('upload-alert','','s');
   const cols=csvCols;
   const rows=csvRows.map(row=>{
-    const {product,video}=parseAdName(row[cols.ad_name]||'');
+    const _n=row[cols.ad_name]||row[cols.campaign]||'';
+    const {product,video}=parseAdName(_n);
     return{
-      ad_name:row[cols.ad_name]||'',product,video,
+      ad_name:_n,product,video,
       campaign:row[cols.campaign]||'',adset:row[cols.adset]||'',
       impressions:parseNum(row[cols.impressions]),
       reach:parseNum(row[cols.reach]),
