@@ -456,14 +456,16 @@ function showAlert(msg){
 })();
 
 async function checkFirstRun(){
-  // Use direct doc read (works for all viewers) instead of collection query
   try{
     const snap=await S.db.doc('config/meta').get();
     if(snap.exists&&snap.data().initialized)return; // App set up → show login
-  }catch(e){}
-  // Not initialized yet → show setup form
-  document.getElementById('auth-form').style.display='none';
-  document.getElementById('setup-form').style.display='block';
+    // Truly not initialized → show setup form
+    document.getElementById('auth-form').style.display='none';
+    document.getElementById('setup-form').style.display='block';
+  }catch(e){
+    // DB transient error — do NOT show setup form; let user retry
+    setAlert('auth-alert',`Lỗi kết nối dữ liệu. <button class="btn btn-s" onclick="location.reload()" style="margin-left:6px;">Tải lại trang</button>`,'e');
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -542,14 +544,19 @@ async function loadApp(){
 
 async function loadWeeks(){
   const snap=await S.db.doc('config/meta').get();
-  S.weeks=(snap.exists&&snap.data().weeks)?[...snap.data().weeks]:[];
+  const meta=snap.exists?snap.data():{};
+  S.weeks=(meta.weeks)?[...meta.weeks]:[];
+  // Ensure initialized:true is always set if we have data
+  if(S.weeks.length&&!meta.initialized){
+    try{await S.db.doc('config/meta').set({...meta,initialized:true});}catch(e){}
+  }
   // Fallback: scan reports if weeks list is empty but reports exist
   if(!S.weeks.length){
     const rsnap=await S.db.collection('reports').limit(50).get();
     if(!rsnap.empty){
       const weekSet=new Set(rsnap.docs.map(d=>d.data().week).filter(Boolean));
       S.weeks=[...weekSet];
-      if(S.weeks.length){const ms2=await S.db.doc('config/meta').get();const md2=ms2.exists?ms2.data():{};await S.db.doc('config/meta').set({...md2,weeks:S.weeks,initialized:true});}
+      if(S.weeks.length){const md2=snap.exists?meta:{};await S.db.doc('config/meta').set({...md2,weeks:S.weeks,initialized:true});}
     }
   }
   S.weeks.sort((a,b)=>b.localeCompare(a));
