@@ -1520,16 +1520,17 @@ async function saveDriveLink(){
   if(!name||!url){setAlert('drive-m-alert','Vui lòng nhập đầy đủ.');return;}
   try{
     S.driveLinks[name]=url;
-    await S.db.doc('config/drive_links').set({links:S.driveLinks});
+    // Preserve folder field — always merge instead of overwrite
+    await S.db.doc('config/drive_links').set({links:S.driveLinks,folder:S.driveFolder});
     closeDriveModal();
     renderCfgDrive(document.getElementById('content'));
-  }catch(e){setAlert('drive-m-alert','Lỗi: '+e.message);}
+  }catch(e){setAlert('drive-m-alert','Lỗi lưu: '+e.message);}
 }
 function deleteDriveLink(name){
   showConfirm(`Xóa link cho video "<b>${name}</b>"?`,async()=>{
     try{
       delete S.driveLinks[name];
-      await S.db.doc('config/drive_links').set({links:S.driveLinks});
+      await S.db.doc('config/drive_links').set({links:S.driveLinks,folder:S.driveFolder});
       renderCfgDrive(document.getElementById('content'));
     }catch(e){showAlert('Lỗi: '+e.message);}
   });
